@@ -70,6 +70,13 @@ if (-not $cli) { throw "Neither uSync nor uSyncCli found in $toolPath" }
 Write-Host "Using $cli"
 
 try {
+    # An older uSync.Cli exits 1 for an unknown command, which would make every
+    # "must fail" fixture pass by accident. Stop early instead.
+    $help = & $cli --help 2>&1 | Out-String
+    if ($help -notmatch '\bfiles-verify\b') {
+        throw "This uSync.Cli ($Version) has no files-verify command. Build one with it into the feed."
+    }
+
     # --- fixtures --------------------------------------------------------------------
     foreach ($dir in Get-ChildItem $fixtures -Directory | Sort-Object Name) {
         $expected = Get-Content (Join-Path $dir.FullName 'expected.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -105,7 +112,7 @@ try {
 
         & $cli files-verify --format sarif --output (Join-Path $out 'usync.sarif') | Out-Null
         $sarif = Get-Content (Join-Path $out 'usync.sarif') -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
-        Assert-Equal 'sarif output has results' $true ([bool]$sarif.runs[0].results)
+        Assert-Equal 'sarif output has results' $true ([bool]($sarif -and $sarif.runs -and $sarif.runs[0].results))
 
         & $cli files-verify --format junit --output (Join-Path $out 'usync.xml') | Out-Null
         $junit = Test-Path (Join-Path $out 'usync.xml')

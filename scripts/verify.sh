@@ -6,6 +6,14 @@ set -uo pipefail
 is_true() { [ "${1:-false}" = "true" ]; }
 
 cli="$USYNC_CLI"
+
+# Older uSync.Cli builds exit 1 on an unknown command, which would read as "problems found".
+if ! "$cli" --help 2>&1 | grep -q 'files-verify'; then
+  echo "::error::This uSync.Cli has no files-verify command. Use a newer version (the version input)."
+  echo "exit-code=2" >> "$GITHUB_OUTPUT"
+  exit 0
+fi
+
 args=(files-verify)
 [ -n "${INPUT_FOLDER:-}" ] && args+=(--folder "$INPUT_FOLDER")
 is_true "${INPUT_CONTENT:-}" && args+=(--content)
