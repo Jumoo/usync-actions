@@ -28,6 +28,17 @@ xml_escape() {
   printf '%s' "$s"
 }
 
+# NuGet reads a relative source in a nuget.config as relative to the config file, which
+# lives in a temp folder, so turn a relative folder into an absolute one first.
+absolute_source() {
+  local s="$1" base
+  case "$s" in
+    *://* | /* | [A-Za-z]:* | '\'*) printf '%s' "$s"; return ;;
+  esac
+  base="$(pwd -W 2>/dev/null || pwd)"   # pwd -W gives C:/... under Git Bash on Windows
+  printf '%s/%s' "$base" "$s"
+}
+
 write_nuget_config() {
   local dir file
   dir="$(mktemp -d)"
@@ -105,7 +116,7 @@ case "${1:-}" in
       if [ -n "${INPUT_SOURCE:-}" ]; then
         # --add-source fails when the machine or repo uses package source mapping,
         # so install from a config of our own: nuget.org plus the extra source, no mapping.
-        args+=(--configfile "$(write_nuget_config "$INPUT_SOURCE")")
+        args+=(--configfile "$(write_nuget_config "$(absolute_source "$INPUT_SOURCE")")")
       fi
       dotnet "${args[@]}"
       cli="$(find_command "$tool_path")" || {
