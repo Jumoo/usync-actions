@@ -1,0 +1,72 @@
+# Step template: run a connected uSync.Cli command against a site.
+# Keep the client secret in a secret variable or variable group; it is passed
+# to the tool as an environment variable, never on the command line.
+#
+#   - template: azure-devops/templates/run.yml@usync
+#     parameters:
+#       command: usync-import
+#       server: $(SiteUrl)
+#       clientId: $(UsyncClientId)
+#       clientSecret: $(UsyncClientSecret)
+parameters:
+  - name: command
+    type: string           # usync-ping, usync-import, usync-report, cache-rebuild, healthcheck-group-check ...
+  - name: args
+    type: string
+    default: ''            # extra arguments, split on spaces, e.g. '--timeout 300'
+  - name: server
+    type: string
+    default: ''
+  - name: clientId
+    type: string
+    default: ''
+  - name: clientSecret
+    type: string
+    default: ''
+  - name: workingDirectory
+    type: string
+    default: $(Build.SourcesDirectory)
+  - name: displayName
+    type: string
+    default: ''
+  - name: version
+    type: string
+    default: latest
+  - name: prerelease
+    type: boolean
+    default: false
+  - name: dotnetVersion
+    type: string
+    default: 10.0.x
+  - name: source
+    type: string
+    default: ''
+
+steps:
+  - template: setup.yml
+    parameters:
+      version: ${{ parameters.version }}
+      prerelease: ${{ parameters.prerelease }}
+      dotnetVersion: ${{ parameters.dotnetVersion }}
+      source: ${{ parameters.source }}
+
+  - bash: |
+      set -uo pipefail
+      for name in USYNC_SERVER USYNC_CLIENT_ID USYNC_CLIENT_SECRET; do
+        [ -z "${!name:-}" ] && unset "$name"
+      done
+      extra=()
+      [ -n "$ARGS" ] && read -r -a extra <<< "$ARGS"
+      "$USYNC_CLI" "$COMMAND" ${extra[@]+"${extra[@]}"}
+    ${{ if ne(parameters.displayName, '') }}:
+      displayName: ${{ parameters.displayName }}
+    ${{ else }}:
+      displayName: uSync - ${{ parameters.command }}
+    workingDirectory: ${{ parameters.workingDirectory }}
+    env:
+      USYNC_CLI: $(usyncCli)
+      COMMAND: ${{ parameters.command }}
+      ARGS: ${{ parameters.args }}
+      USYNC_SERVER: ${{ parameters.server }}
+      USYNC_CLIENT_ID: ${{ parameters.clientId }}
+      USYNC_CLIENT_SECRET: ${{ parameters.clientSecret }}

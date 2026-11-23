@@ -1,0 +1,95 @@
+# Step template: check uSync files with `uSync files-verify`.
+#
+#   resources:
+#     repositories:
+#       - repository: usync
+#         type: github
+#         name: Jumoo/usync-actions
+#         ref: refs/tags/v1
+#         endpoint: github        # a GitHub service connection
+#   steps:
+#     - checkout: self
+#     - template: azure-devops/templates/verify.yml@usync
+#       parameters:
+#         workingDirectory: src/MySite
+parameters:
+  - name: workingDirectory
+    type: string
+    default: $(Build.SourcesDirectory)
+  - name: folder
+    type: string
+    default: ''
+  - name: content
+    type: boolean
+    default: false
+  - name: warningsAsErrors
+    type: boolean
+    default: false
+  - name: changedSince
+    type: string
+    default: ''          # e.g. origin/main (needs a full-history checkout)
+  - name: publishFolder
+    type: string
+    default: ''
+  - name: publishResults
+    type: boolean
+    default: true        # JUnit results on the run's Tests tab
+  - name: version
+    type: string
+    default: latest
+  - name: prerelease
+    type: boolean
+    default: false
+  - name: dotnetVersion
+    type: string
+    default: 10.0.x
+  - name: source
+    type: string
+    default: ''
+
+steps:
+  - template: setup.yml
+    parameters:
+      version: ${{ parameters.version }}
+      prerelease: ${{ parameters.prerelease }}
+      dotnetVersion: ${{ parameters.dotnetVersion }}
+      source: ${{ parameters.source }}
+
+  - bash: |
+      set -uo pipefail
+      args=(files-verify)
+      [ -n "$FOLDER" ] && args+=(--folder "$FOLDER")
+      [ "$CONTENT" = "True" ] && args+=(--content)
+      [ "$WARNINGS_AS_ERRORS" = "True" ] && args+=(--warnings-as-errors)
+      [ -n "$CHANGED_SINCE" ] && args+=(--changed-since "$CHANGED_SINCE")
+      [ -n "$PUBLISH_FOLDER" ] && args+=(--publish-folder "$PUBLISH_FOLDER")
+
+      "$USYNC_CLI" "${args[@]}" --format text
+      code=$?
+      if [ "$PUBLISH_RESULTS" = "True" ]; then
+        "$USYNC_CLI" "${args[@]}" --format junit --output "$AGENT_TEMPDIRECTORY/usync-verify.xml" >/dev/null || true
+      fi
+      if [ "$code" -ne 0 ]; then
+        echo "##vso[task.logissue type=error]uSync files-verify failed (exit $code)"
+      fi
+      exit "$code"
+    displayName: uSync - verify files
+    workingDirectory: ${{ parameters.workingDirectory }}
+    env:
+      USYNC_CLI: $(usyncCli)
+      FOLDER: ${{ parameters.folder }}
+      CONTENT: ${{ parameters.content }}
+      WARNINGS_AS_ERRORS: ${{ parameters.warningsAsErrors }}
+      CHANGED_SINCE: ${{ parameters.changedSince }}
+      PUBLISH_FOLDER: ${{ parameters.publishFolder }}
+      PUBLISH_RESULTS: ${{ parameters.publishResults }}
+
+  - ${{ if eq(parameters.publishResults, true) }}:
+    - task: PublishTestResults@2
+      displayName: uSync - publish results
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: JUnit
+        testResultsFiles: $(Agent.TempDirectory)/usync-verify.xml
+        testRunTitle: uSync files
+        failTaskOnMissingResultsFile: false
