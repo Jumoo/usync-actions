@@ -1,0 +1,77 @@
+name: uSync setup
+description: Install the uSync.Cli dotnet tool and put it on PATH.
+author: Jumoo
+branding:
+  icon: download
+  color: blue
+
+inputs:
+  version:
+    description: uSync.Cli version to install. `latest` is the newest stable release on nuget.org.
+    required: false
+    default: latest
+  prerelease:
+    description: Allow prerelease versions when `version` is `latest`.
+    required: false
+    default: 'false'
+  dotnet-version:
+    description: .NET SDK to install with actions/setup-dotnet when the runtime the tool needs is missing.
+    required: false
+    default: 10.0.x
+  source:
+    description: Extra NuGet source (URL or folder) to install the tool from, as well as nuget.org.
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: The uSync.Cli version that was installed.
+    value: ${{ steps.setup.outputs.version }}
+  command:
+    description: Full path to the uSync.Cli command.
+    value: ${{ steps.setup.outputs.command }}
+
+runs:
+  using: composite
+  steps:
+    # --- install uSync.Cli (same steps in setup, verify and run; the logic is in scripts/setup.sh) ---
+    - id: runtime
+      shell: bash
+      env:
+        INPUT_DOTNET_VERSION: ${{ inputs.dotnet-version }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" runtime
+
+    - if: steps.runtime.outputs.needed == 'true'
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - id: resolve
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" resolve
+
+    - if: steps.resolve.outputs.cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.resolve.outputs.tool-path }}
+        key: usync-cli-${{ runner.os }}-${{ steps.resolve.outputs.version }}
+
+    - id: setup
+      shell: bash
+      env:
+        TOOL_PATH: ${{ steps.resolve.outputs.tool-path }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" install
+    # --- end install ---
