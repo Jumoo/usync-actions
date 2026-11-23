@@ -1,0 +1,74 @@
+# GitLab CI/CD component: check uSync files with `uSyncCli files-verify`.
+#
+#   include:
+#     - component: $CI_SERVER_FQDN/jumoo/usync/verify@1
+#       inputs:
+#         working-directory: src/MySite
+#
+# Results show on the merge request through the JUnit report.
+spec:
+  inputs:
+    stage:
+      default: test
+    job-name:
+      default: usync-verify
+    working-directory:
+      default: '.'
+    folder:
+      default: ''
+    content:
+      type: boolean
+      default: false
+    warnings-as-errors:
+      type: boolean
+      default: false
+    changed-since:
+      default: ''
+      description: Git ref, e.g. origin/main. Only problems in files changed since then are reported.
+    publish-folder:
+      default: ''
+    version:
+      default: latest
+    image:
+      default: mcr.microsoft.com/dotnet/sdk:10.0
+---
+$[[ inputs.job-name ]]:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  variables:
+    # Inputs go through variables so they reach the script as data, not as shell code.
+    USYNC_WORKDIR: $[[ inputs.working-directory ]]
+    USYNC_FOLDER: $[[ inputs.folder ]]
+    USYNC_CONTENT: '$[[ inputs.content ]]'
+    USYNC_WARNINGS_AS_ERRORS: '$[[ inputs.warnings-as-errors ]]'
+    USYNC_CHANGED_SINCE: $[[ inputs.changed-since ]]
+    USYNC_PUBLISH_FOLDER: $[[ inputs.publish-folder ]]
+    USYNC_VERSION: $[[ inputs.version ]]
+    GIT_DEPTH: 0
+  script:
+    - |
+      set -u
+      tool_path="$CI_PROJECT_DIR/.usync-cli"
+      if [ "$USYNC_VERSION" = "latest" ]; then
+        dotnet tool update uSync.Cli --tool-path "$tool_path"
+      else
+        dotnet tool update uSync.Cli --tool-path "$tool_path" --version "$USYNC_VERSION"
+      fi
+      cli="$tool_path/uSync"; [ -x "$cli" ] || cli="$tool_path/uSyncCli"
+
+      cd "$USYNC_WORKDIR"
+      set -- files-verify
+      [ -n "$USYNC_FOLDER" ] && set -- "$@" --folder "$USYNC_FOLDER"
+      [ "$USYNC_CONTENT" = "true" ] && set -- "$@" --content
+      [ "$USYNC_WARNINGS_AS_ERRORS" = "true" ] && set -- "$@" --warnings-as-errors
+      [ -n "$USYNC_CHANGED_SINCE" ] && set -- "$@" --changed-since "$USYNC_CHANGED_SINCE"
+      [ -n "$USYNC_PUBLISH_FOLDER" ] && set -- "$@" --publish-folder "$USYNC_PUBLISH_FOLDER"
+
+      code=0
+      "$cli" "$@" --format text || code=$?
+      "$cli" "$@" --format junit --output "$CI_PROJECT_DIR/usync-verify.xml" >/dev/null || true
+      exit "$code"
+  artifacts:
+    when: always
+    reports:
+      junit: usync-verify.xml

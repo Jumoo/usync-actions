@@ -1,0 +1,114 @@
+name: uSync run
+description: Run a uSync.Cli command against a running Umbraco site (ping, import, report, cache rebuild, health checks).
+author: Jumoo
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  command:
+    description: The uSync.Cli command, e.g. usync-ping, usync-import, usync-report, cache-rebuild, healthcheck-group-check.
+    required: true
+  args:
+    description: Extra arguments. One per line, or a single line split on spaces. Don't put secrets here.
+    required: false
+    default: ''
+  server:
+    description: Site URL. Passed to the tool as USYNC_SERVER.
+    required: false
+    default: ''
+  client-id:
+    description: API user client id. Passed to the tool as USYNC_CLIENT_ID.
+    required: false
+    default: ''
+  client-secret:
+    description: API user client secret. Passed to the tool as USYNC_CLIENT_SECRET.
+    required: false
+    default: ''
+  working-directory:
+    description: Folder to run in (an appsettings.json here is read for settings).
+    required: false
+    default: '.'
+  version:
+    description: uSync.Cli version to install. `latest` is the newest stable release on nuget.org.
+    required: false
+    default: latest
+  prerelease:
+    description: Allow prerelease versions when `version` is `latest`.
+    required: false
+    default: 'false'
+  dotnet-version:
+    description: .NET SDK to install with actions/setup-dotnet when the runtime the tool needs is missing.
+    required: false
+    default: 10.0.x
+  source:
+    description: Extra NuGet source (URL or folder) to install the tool from, as well as nuget.org.
+    required: false
+    default: ''
+
+outputs:
+  exit-code:
+    description: The command's exit code.
+    value: ${{ steps.run.outputs.exit-code }}
+  version:
+    description: The uSync.Cli version used.
+    value: ${{ steps.setup.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # --- install uSync.Cli (same steps in setup, verify and run; the logic is in scripts/setup.sh) ---
+    - id: runtime
+      shell: bash
+      env:
+        INPUT_DOTNET_VERSION: ${{ inputs.dotnet-version }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" runtime
+
+    - if: steps.runtime.outputs.needed == 'true'
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - id: resolve
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" resolve
+
+    - if: steps.resolve.outputs.cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.resolve.outputs.tool-path }}
+        key: usync-cli-${{ runner.os }}-${{ steps.resolve.outputs.version }}
+
+    - id: setup
+      shell: bash
+      env:
+        TOOL_PATH: ${{ steps.resolve.outputs.tool-path }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" install
+    # --- end install ---
+
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        USYNC_CLI: ${{ steps.setup.outputs.command }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_ARGS: ${{ inputs.args }}
+        USYNC_SERVER: ${{ inputs.server }}
+        USYNC_CLIENT_ID: ${{ inputs.client-id }}
+        USYNC_CLIENT_SECRET: ${{ inputs.client-secret }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/run.sh"

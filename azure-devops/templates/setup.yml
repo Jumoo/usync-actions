@@ -1,0 +1,72 @@
+# Step template: install uSync.Cli and put it on PATH.
+# Used by verify.yml and run.yml; you can also use it on its own.
+parameters:
+  - name: version
+    type: string
+    default: latest      # or a version, e.g. 17.1.0
+  - name: prerelease
+    type: boolean
+    default: false
+  - name: dotnetVersion
+    type: string
+    default: 10.0.x
+  - name: source
+    type: string
+    default: ''          # extra NuGet feed (URL or folder)
+
+steps:
+  - bash: |
+      set -euo pipefail
+      major="${DOTNET_VERSION%%.*}"
+      if command -v dotnet >/dev/null 2>&1 \
+         && dotnet --list-runtimes | grep -q "^Microsoft.NETCore.App ${major}\."; then
+        echo "##vso[task.setvariable variable=usyncNeedsDotnet]false"
+      else
+        echo "##vso[task.setvariable variable=usyncNeedsDotnet]true"
+      fi
+    displayName: uSync - check .NET runtime
+    env:
+      DOTNET_VERSION: ${{ parameters.dotnetVersion }}
+
+  - task: UseDotNet@2
+    displayName: uSync - install .NET ${{ parameters.dotnetVersion }}
+    condition: and(succeeded(), eq(variables['usyncNeedsDotnet'], 'true'))
+    inputs:
+      packageType: sdk
+      version: ${{ parameters.dotnetVersion }}
+
+  - bash: |
+      set -euo pipefail
+      tool_path="$AGENT_TEMPDIRECTORY/usync-cli"
+      args=(tool update uSync.Cli --tool-path "$tool_path")
+      if [ "$VERSION" != "latest" ] && [ -n "$VERSION" ]; then
+        args+=(--version "$VERSION")
+      elif [ "$PRERELEASE" = "True" ] || [ "$PRERELEASE" = "true" ]; then
+        args+=(--prerelease)
+      fi
+      if [ -n "$SOURCE" ]; then
+        # --add-source fails under package source mapping, so use a config of our own.
+        cfg="$AGENT_TEMPDIRECTORY/usync-nuget.config"
+        src="${SOURCE//&/&amp;}"; src="${src//</&lt;}"; src="${src//\"/&quot;}"
+        printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<configuration>' \
+          '  <packageSources>' '    <clear />' \
+          '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />' \
+          "    <add key=\"usync-extra\" value=\"$src\" />" \
+          '  </packageSources>' \
+          '  <packageSourceMapping><clear /></packageSourceMapping>' \
+          '</configuration>' > "$cfg"
+        args+=(--configfile "$cfg")
+      fi
+      dotnet "${args[@]}"
+      for name in uSyncCli uSync; do
+        if [ -f "$tool_path/$name" ] || [ -f "$tool_path/$name.exe" ]; then
+          echo "##vso[task.setvariable variable=usyncCli]$tool_path/$name"
+          break
+        fi
+      done
+      echo "##vso[task.prependpath]$tool_path"
+    displayName: uSync - install uSync.Cli
+    env:
+      VERSION: ${{ parameters.version }}
+      PRERELEASE: ${{ parameters.prerelease }}
+      SOURCE: ${{ parameters.source }}

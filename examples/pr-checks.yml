@@ -1,0 +1,28 @@
+# Check uSync files on every pull request.
+# Copy to .github/workflows/usync-checks.yml in your site's repo.
+name: uSync checks
+
+on:
+  pull_request:
+    paths:
+      - '**/uSync/**'
+      - '**/appsettings*.json'
+
+permissions:
+  contents: read
+  security-events: write   # only needed for the SARIF upload
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # changed-since needs the base branch history
+
+      - uses: Jumoo/usync-actions/verify@v1
+        with:
+          working-directory: src/MySite        # the folder with appsettings.json
+          changed-since: origin/${{ github.base_ref }}
+          summary: true                        # table of changed doc types etc. on the run page
+          sarif: true                          # keep results in the Security tab

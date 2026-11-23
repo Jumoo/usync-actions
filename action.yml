@@ -1,0 +1,157 @@
+# The root action.yml and verify/action.yml must stay byte-for-byte identical
+# (the self-test workflow checks). Edit one, copy it over the other.
+name: uSync verify
+description: Check uSync files for merge conflicts, invalid XML and key or alias clashes before they reach a site.
+author: Jumoo
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  folder:
+    description: uSync folder to check. Default is found from appsettings.json, else the highest uSync/v{n}.
+    required: false
+    default: ''
+  content:
+    description: Also check Content, Media and Blueprints.
+    required: false
+    default: 'false'
+  warnings-as-errors:
+    description: Fail on warnings as well as errors.
+    required: false
+    default: 'false'
+  changed-since:
+    description: Only report problems in files changed since this git ref (e.g. origin/main). Needs a checkout with history (fetch-depth 0).
+    required: false
+    default: ''
+  summary:
+    description: Write a table of changed items to the job summary (use with changed-since).
+    required: false
+    default: 'false'
+  publish-folder:
+    description: Check this publish output folder contains the uSync folder with the same files.
+    required: false
+    default: ''
+  sarif:
+    description: Also write a SARIF report.
+    required: false
+    default: 'false'
+  sarif-file:
+    description: Where to write the SARIF report, relative to working-directory.
+    required: false
+    default: usync.sarif
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning (needs the `security-events write` permission). Only used when sarif is true.
+    required: false
+    default: 'true'
+  working-directory:
+    description: Folder to run in (the site root, where appsettings.json is).
+    required: false
+    default: '.'
+  version:
+    description: uSync.Cli version to install. `latest` is the newest stable release on nuget.org.
+    required: false
+    default: latest
+  prerelease:
+    description: Allow prerelease versions when `version` is `latest`.
+    required: false
+    default: 'false'
+  dotnet-version:
+    description: .NET SDK to install with actions/setup-dotnet when the runtime the tool needs is missing.
+    required: false
+    default: 10.0.x
+  source:
+    description: Extra NuGet source (URL or folder) to install the tool from, as well as nuget.org.
+    required: false
+    default: ''
+
+outputs:
+  exit-code:
+    description: files-verify exit code. 0 clean, 1 problems found, 2 the tool failed.
+    value: ${{ steps.verify.outputs.exit-code }}
+  sarif-file:
+    description: Path to the SARIF report (relative to working-directory), when one was written.
+    value: ${{ steps.verify.outputs.sarif-file }}
+  version:
+    description: The uSync.Cli version used.
+    value: ${{ steps.setup.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # --- install uSync.Cli (same steps in setup, verify and run; the logic is in scripts/setup.sh) ---
+    - id: runtime
+      shell: bash
+      env:
+        INPUT_DOTNET_VERSION: ${{ inputs.dotnet-version }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" runtime
+
+    - if: steps.runtime.outputs.needed == 'true'
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - id: resolve
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" resolve
+
+    - if: steps.resolve.outputs.cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.resolve.outputs.tool-path }}
+        key: usync-cli-${{ runner.os }}-${{ steps.resolve.outputs.version }}
+
+    - id: setup
+      shell: bash
+      env:
+        TOOL_PATH: ${{ steps.resolve.outputs.tool-path }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        INPUT_SOURCE: ${{ inputs.source }}
+        INPUT_PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/setup.sh" install
+    # --- end install ---
+
+    - id: verify
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        USYNC_CLI: ${{ steps.setup.outputs.command }}
+        INPUT_FOLDER: ${{ inputs.folder }}
+        INPUT_CONTENT: ${{ inputs.content }}
+        INPUT_WARNINGS_AS_ERRORS: ${{ inputs.warnings-as-errors }}
+        INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_PUBLISH_FOLDER: ${{ inputs.publish-folder }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: |
+        root="$GITHUB_ACTION_PATH"; [ -d "$root/scripts" ] || root="$root/.."
+        bash "$root/scripts/verify.sh"
+
+    - if: inputs.sarif == 'true' && inputs.upload-sarif == 'true' && steps.verify.outputs.sarif-file != ''
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.working-directory }}/${{ steps.verify.outputs.sarif-file }}
+        category: usync
+
+    - if: steps.verify.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.verify.outputs.exit-code }}
+      run: |
+        if [ "${CODE:-2}" = "2" ]; then
+          echo "::error::uSync files-verify could not run (exit ${CODE:-2}), see the log above"
+        else
+          echo "::error::uSync files-verify found problems (exit $CODE)"
+        fi
+        exit "${CODE:-2}"
