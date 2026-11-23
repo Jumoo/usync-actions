@@ -148,3 +148,6 @@ if ($failures.Count) {
     exit 1
 }
 Write-Host 'All passed' -ForegroundColor Green
+# The last native call (junit on alias-clash) leaves LASTEXITCODE at 1, and the
+# GitHub pwsh wrapper exits with it, so exit 0 explicitly.
+exit 0

@@ -58,7 +58,8 @@ jobs:
           SUFFIX: ci.${{ github.run_number }}
         run: |
           dotnet pack uSync/uSync.csproj -c Release -o "$RUNNER_TEMP/feed" --version-suffix "$SUFFIX"
-          pkg="$(ls "$RUNNER_TEMP"/feed/uSync.Cli.*.nupkg | head -n 1)"
+          pkgs=("$RUNNER_TEMP"/feed/uSync.Cli.*.nupkg)
+          pkg="${pkgs[0]}"
           version="$(basename "$pkg" .nupkg)"
           echo "version=${version#uSync.Cli.}" >> "$GITHUB_OUTPUT"
 
