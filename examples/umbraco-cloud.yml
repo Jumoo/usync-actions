@@ -1,0 +1,36 @@
+# Umbraco Cloud: check uSync files before they are pushed to the Cloud git remote.
+#
+# Cloud imports uSync on the site itself and has no post-deploy hook, so only the
+# file checks apply. Run them on the pull request into the branch you push to Cloud,
+# and make this check required in your branch protection rules.
+#
+# If you deploy from GitHub to Cloud with a workflow (the Umbraco Cloud deployment API),
+# add `needs: verify` to that job so a failed check stops the push.
+name: uSync checks (Umbraco Cloud)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: Jumoo/usync-actions/verify@v1
+        with:
+          # Cloud projects keep the site in src/UmbracoProject
+          working-directory: src/UmbracoProject
+          # Cloud transfers content between environments itself, but if you
+          # commit content files, check those too.
+          content: true
+          changed-since: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          summary: ${{ github.event_name == 'pull_request' }}

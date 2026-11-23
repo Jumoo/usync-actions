@@ -1,0 +1,76 @@
+# Deploy to IIS from a self-hosted Windows runner with Web Deploy, then import uSync.
+#
+# The runner needs Web Deploy (msdeploy.exe) and network access to the server.
+# The checks run on a GitHub-hosted runner first, so a bad branch never reaches the server.
+#
+# Needs:
+#   vars.SITE_URL, vars.IIS_SITE_NAME, vars.WEBDEPLOY_SERVER (e.g. https://web01:8172/msdeploy.axd)
+#   secrets.WEBDEPLOY_USER / WEBDEPLOY_PASSWORD
+#   secrets.USYNC_CLIENT_ID / USYNC_CLIENT_SECRET
+name: Deploy to IIS
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Jumoo/usync-actions/verify@v1
+        with:
+          working-directory: src/MySite
+
+  deploy:
+    needs: verify
+    runs-on: [self-hosted, windows]
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Publish
+        shell: pwsh
+        run: dotnet publish src/MySite -c Release -o publish
+
+      - name: Web Deploy
+        shell: pwsh
+        env:
+          SITE: ${{ vars.IIS_SITE_NAME }}
+          SERVER: ${{ vars.WEBDEPLOY_SERVER }}
+          WD_USER: ${{ secrets.WEBDEPLOY_USER }}
+          WD_PASSWORD: ${{ secrets.WEBDEPLOY_PASSWORD }}
+        run: |
+          $msdeploy = "$env:ProgramFiles\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          & $msdeploy -verb:sync `
+            "-source:contentPath=$PWD\publish" `
+            "-dest:contentPath=$env:SITE,computerName=$($env:SERVER)?site=$env:SITE,userName=$env:WD_USER,password=$env:WD_PASSWORD,authType=Basic" `
+            -enableRule:AppOffline -allowUntrusted
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: Jumoo/usync-actions/run@v1
+        with:
+          command: usync-ping
+          args: --timeout 300
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
+
+      - uses: Jumoo/usync-actions/run@v1
+        with:
+          command: usync-import
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
+
+      # Fail the deploy if the uSync health checks (folder clashes etc.) report an error.
+      - uses: Jumoo/usync-actions/run@v1
+        with:
+          command: healthcheck-group-check
+          args: --group uSync
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
