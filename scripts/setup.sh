@@ -7,7 +7,7 @@
 set -euo pipefail
 
 package_id="uSync.Cli"
-commands=(uSync uSyncCli)   # uSync is the v1 contract; uSyncCli is the name older builds use
+commands=(uSyncCli uSync)   # uSyncCli is the tool command; uSync is kept as a fallback
 
 out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
@@ -20,6 +20,32 @@ find_command() {
     fi
   done
   return 1
+}
+
+xml_escape() {
+  local s="$1"
+  s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"; s="${s//\"/&quot;}"
+  printf '%s' "$s"
+}
+
+write_nuget_config() {
+  local dir file
+  dir="$(mktemp -d)"
+  file="$dir/nuget.config"
+  cat > "$file" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+    <add key="usync-extra" value="$(xml_escape "$1")" />
+  </packageSources>
+  <packageSourceMapping>
+    <clear />
+  </packageSourceMapping>
+</configuration>
+EOF
+  printf '%s' "$file"
 }
 
 case "${1:-}" in
@@ -77,7 +103,9 @@ case "${1:-}" in
         args+=(--prerelease)
       fi
       if [ -n "${INPUT_SOURCE:-}" ]; then
-        args+=(--add-source "$INPUT_SOURCE")
+        # --add-source fails when the machine or repo uses package source mapping,
+        # so install from a config of our own: nuget.org plus the extra source, no mapping.
+        args+=(--configfile "$(write_nuget_config "$INPUT_SOURCE")")
       fi
       dotnet "${args[@]}"
       cli="$(find_command "$tool_path")" || {

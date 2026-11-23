@@ -50,7 +50,21 @@ if ($Feed) {
         if (-not $pkg) { throw "No uSync.Cli.*.nupkg in '$Feed'." }
         $Version = $pkg.Name -replace '^uSync\.Cli\.', '' -replace '\.nupkg$', ''
     }
-    $installArgs += @('--add-source', $Feed)
+    # --add-source fails under package source mapping, so use a config of our own.
+    $nugetConfig = Join-Path ([System.IO.Path]::GetTempPath()) "usync-actions-nuget-$PID.config"
+    $feedXml = [System.Security.SecurityElement]::Escape($Feed)
+    @"
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+    <add key="usync-extra" value="$feedXml" />
+  </packageSources>
+  <packageSourceMapping><clear /></packageSourceMapping>
+</configuration>
+"@ | Set-Content -Path $nugetConfig -Encoding utf8
+    $installArgs += @('--configfile', $nugetConfig)
 }
 if ($Version) { $installArgs += @('--version', $Version) }
 
@@ -61,8 +75,8 @@ Write-Host "Installing uSync.Cli $Version into $toolPath"
 & dotnet @installArgs
 if ($LASTEXITCODE -ne 0) { throw "dotnet tool install failed ($LASTEXITCODE)" }
 
-# uSync is the v1 contract; uSyncCli is the name older builds use.
-$cli = @('uSync.exe', 'uSync', 'uSyncCli.exe', 'uSyncCli') |
+# uSyncCli is the tool command; uSync is kept as a fallback.
+$cli = @('uSyncCli.exe', 'uSyncCli', 'uSync.exe', 'uSync') |
     ForEach-Object { Join-Path $toolPath $_ } |
     Where-Object { Test-Path $_ -PathType Leaf } |
     Select-Object -First 1

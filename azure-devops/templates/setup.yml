@@ -44,9 +44,21 @@ steps:
       elif [ "$PRERELEASE" = "True" ] || [ "$PRERELEASE" = "true" ]; then
         args+=(--prerelease)
       fi
-      [ -n "$SOURCE" ] && args+=(--add-source "$SOURCE")
+      if [ -n "$SOURCE" ]; then
+        # --add-source fails under package source mapping, so use a config of our own.
+        cfg="$AGENT_TEMPDIRECTORY/usync-nuget.config"
+        src="${SOURCE//&/&amp;}"; src="${src//</&lt;}"; src="${src//\"/&quot;}"
+        printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<configuration>' \
+          '  <packageSources>' '    <clear />' \
+          '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />' \
+          "    <add key=\"usync-extra\" value=\"$src\" />" \
+          '  </packageSources>' \
+          '  <packageSourceMapping><clear /></packageSourceMapping>' \
+          '</configuration>' > "$cfg"
+        args+=(--configfile "$cfg")
+      fi
       dotnet "${args[@]}"
-      for name in uSync uSyncCli; do
+      for name in uSyncCli uSync; do
         if [ -f "$tool_path/$name" ] || [ -f "$tool_path/$name.exe" ]; then
           echo "##vso[task.setvariable variable=usyncCli]$tool_path/$name"
           break
