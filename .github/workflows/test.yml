@@ -16,8 +16,9 @@ permissions:
 
 env:
   # Build uSync.Cli from source until a release with files-verify is on nuget.org.
+  # The USYNC_CLI_REF repo variable points at a CLI branch while both are in review.
   CLI_REPO: Jumoo/uSync.CommandLine
-  CLI_REF: ${{ inputs.cli-ref || 'v17/main' }}
+  CLI_REF: ${{ inputs.cli-ref || vars.USYNC_CLI_REF || 'v17/main' }}
 
 jobs:
   lint:
