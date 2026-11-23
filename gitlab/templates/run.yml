@@ -1,0 +1,60 @@
+# GitLab CI/CD component: run a connected uSync.Cli command against a site.
+#
+# Put USYNC_CLIENT_ID and USYNC_CLIENT_SECRET in the project's CI/CD variables
+# (masked, protected). The tool reads them from the environment, so they are not
+# inputs here and never appear on the command line.
+#
+#   include:
+#     - component: $CI_SERVER_FQDN/jumoo/usync/run@1
+#       inputs:
+#         job-name: usync-import
+#         stage: deploy
+#         command: usync-import
+#         server: https://my-site.example.com
+#
+#   # add anything else (needs, environment, rules) by extending the job:
+#   usync-import:
+#     needs: [deploy-site]
+#     environment: production
+spec:
+  inputs:
+    stage:
+      default: deploy
+    job-name:
+      default: usync-run
+    command:
+      description: usync-ping, usync-import, usync-report, cache-rebuild, healthcheck-group-check ...
+    args:
+      default: ''
+      description: Extra arguments, split on spaces, e.g. "--timeout 300". No secrets.
+    server:
+      default: ''
+      description: Site URL. Leave empty to use a USYNC_SERVER CI/CD variable.
+    version:
+      default: latest
+    image:
+      default: mcr.microsoft.com/dotnet/sdk:10.0
+---
+$[[ inputs.job-name ]]:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  variables:
+    USYNC_COMMAND: $[[ inputs.command ]]
+    USYNC_ARGS: $[[ inputs.args ]]
+    USYNC_SERVER_INPUT: $[[ inputs.server ]]
+    USYNC_VERSION: $[[ inputs.version ]]
+  script:
+    - |
+      tool_path="$CI_PROJECT_DIR/.usync-cli"
+      if [ "$USYNC_VERSION" = "latest" ]; then
+        dotnet tool update uSync.Cli --tool-path "$tool_path"
+      else
+        dotnet tool update uSync.Cli --tool-path "$tool_path" --version "$USYNC_VERSION"
+      fi
+      cli="$tool_path/uSync"; [ -x "$cli" ] || cli="$tool_path/uSyncCli"
+
+      [ -n "$USYNC_SERVER_INPUT" ] && export USYNC_SERVER="$USYNC_SERVER_INPUT"
+      # USYNC_ARGS is split on whitespace on purpose (no globbing).
+      set -f
+      # shellcheck disable=SC2086
+      "$cli" "$USYNC_COMMAND" $USYNC_ARGS
