@@ -6,7 +6,7 @@ Build and deploy pipeline steps for Umbraco sites that use [uSync](https://jumoo
 - **run** talks to a running site after a deploy: wait for it to come up, run an import, get a report of what an import would change, rebuild caches, run health checks.
 - **setup** installs the tool, if you want to call it yourself.
 
-All three are thin wrappers around the [`uSync.Cli`](https://github.com/Jumoo/uSync.CommandLine) dotnet tool, so the same checks run on your machine (`uSync files-verify`) and on [Azure DevOps, GitLab, Bitbucket, TeamCity and Octopus](docs/other-platforms.md).
+All three are thin wrappers around the [`uSync.Cli`](https://github.com/Jumoo/uSync.CommandLine) dotnet tool, so the same checks run on your machine (`uSyncCli files-verify`) and on [Azure DevOps, GitLab, Bitbucket, TeamCity and Octopus](docs/other-platforms.md).
 
 ## Quick start
 
@@ -60,7 +60,7 @@ More in [`examples/`](examples):
 
 `Jumoo/usync-actions/verify@v1` (also published at the repo root as `Jumoo/usync-actions@v1`, which is the one listed on the Marketplace).
 
-Runs `uSync files-verify`. Problems show as annotations on the pull request's changed files. The step fails if it finds errors.
+Runs `uSyncCli files-verify`. Problems show as annotations on the pull request's changed files. The step fails if it finds errors.
 
 What it checks:
 
@@ -107,7 +107,7 @@ To act on the result instead of failing, use `continue-on-error: true` and read 
 
 `Jumoo/usync-actions/run@v1`
 
-Runs any connected uSync.Cli command against a site, over the Umbraco Management API. Commands include `usync-ping`, `usync-import`, `usync-export`, `usync-report`, `cache-rebuild`, `models-rebuild`, `indexer-rebuild` and `healthcheck-group-check`. Run `uSync --help` for the full list.
+Runs any connected uSync.Cli command against a site, over the Umbraco Management API. Commands include `usync-ping`, `usync-import`, `usync-export`, `usync-report`, `cache-rebuild`, `models-rebuild`, `indexer-rebuild` and `healthcheck-group-check`. Run `uSyncCli --help` for the full list.
 
 The server and credentials go to the tool as the environment variables `USYNC_SERVER`, `USYNC_CLIENT_ID` and `USYNC_CLIENT_SECRET`, never on the command line, so they stay out of the logs.
 
@@ -144,7 +144,7 @@ Installs uSync.Cli and puts it on `PATH`, for when you want to call the tool you
 
 ```yaml
 - uses: Jumoo/usync-actions/setup@v1
-- run: uSync files-verify --format junit --output usync.xml
+- run: uSyncCli files-verify --format junit --output usync.xml
 ```
 
 | Input | Default | Description |

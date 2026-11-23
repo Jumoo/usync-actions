@@ -96,8 +96,8 @@ pipelines:
           script:
             - dotnet tool install uSync.Cli --tool-path ./.usync-cli
             - cd src/MySite
-            - ../../.usync-cli/uSync files-verify --format junit --output ../../test-results/usync.xml || true
-            - ../../.usync-cli/uSync files-verify --format text   # this one fails the step
+            - ../../.usync-cli/uSyncCli files-verify --format junit --output ../../test-results/usync.xml || true
+            - ../../.usync-cli/uSyncCli files-verify --format text   # this one fails the step
           # Bitbucket picks up JUnit files under test-results/ by itself.
 
   branches:
@@ -109,8 +109,8 @@ pipelines:
             - echo "your deploy here"
             - dotnet tool install uSync.Cli --tool-path ./.usync-cli
             # USYNC_SERVER, USYNC_CLIENT_ID, USYNC_CLIENT_SECRET are secured deployment variables
-            - ./.usync-cli/uSync usync-ping --timeout 300
-            - ./.usync-cli/uSync usync-import
+            - ./.usync-cli/uSyncCli usync-ping --timeout 300
+            - ./.usync-cli/uSyncCli usync-import
 ```
 
 ## TeamCity
@@ -124,7 +124,7 @@ steps {
         workingDir = "src/MySite"
         scriptContent = """
             dotnet tool update uSync.Cli --tool-path %system.teamcity.build.tempDir%/usync-cli
-            %system.teamcity.build.tempDir%/usync-cli/uSync files-verify --format junit --output usync.xml
+            %system.teamcity.build.tempDir%/usync-cli/uSyncCli files-verify --format junit --output usync.xml
         """.trimIndent()
     }
     // after the deploy step
@@ -132,8 +132,8 @@ steps {
         name = "uSync import"
         scriptContent = """
             dotnet tool update uSync.Cli --tool-path %system.teamcity.build.tempDir%/usync-cli
-            %system.teamcity.build.tempDir%/usync-cli/uSync usync-ping --timeout 300
-            %system.teamcity.build.tempDir%/usync-cli/uSync usync-import
+            %system.teamcity.build.tempDir%/usync-cli/uSyncCli usync-ping --timeout 300
+            %system.teamcity.build.tempDir%/usync-cli/uSyncCli usync-import
         """.trimIndent()
     }
 }
@@ -176,12 +176,12 @@ Run the file checks in your build server before packaging, not in Octopus: by th
 
 ```powershell
 dotnet tool install --global uSync.Cli
-uSync files-verify
+uSyncCli files-verify
 ```
 
 Or as a git pre-commit hook (`.git/hooks/pre-commit`):
 
 ```sh
 #!/bin/sh
-cd src/MySite && uSync files-verify --format text
+cd src/MySite && uSyncCli files-verify --format text
 ```

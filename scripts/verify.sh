@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs `uSync files-verify` for the verify action. Always exits 0 so the SARIF upload
+# Runs `uSyncCli files-verify` for the verify action. Always exits 0 so the SARIF upload
 # can still run; the action fails in a later step using the exit-code output.
 set -uo pipefail
 

@@ -1,4 +1,4 @@
-# GitLab CI/CD component: check uSync files with `uSync files-verify`.
+# GitLab CI/CD component: check uSync files with `uSyncCli files-verify`.
 #
 #   include:
 #     - component: $CI_SERVER_FQDN/jumoo/usync/verify@1

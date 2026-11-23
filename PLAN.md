@@ -18,7 +18,7 @@ Reasons:
 - Every pipeline that builds an Umbraco site already has the .NET SDK on it. Being "not .NET" saves nothing for our users.
 - The site commands already exist in uSync.Cli (`usync-ping`, `usync-import`, `cache-rebuild`, `healthcheck-group-check`...). Rewriting them in TypeScript means keeping two Management API clients in step.
 - A dotnet tool runs the same on GitHub, Azure DevOps, GitLab, Bitbucket, Octopus, TeamCity and a developer's own machine. A TypeScript action only runs on GitHub. With the logic in the tool, each platform wrapper is a few lines of YAML.
-- Developers can run `uSync files-verify` locally or in a pre-commit hook and get the same answer as CI.
+- Developers can run `uSyncCli files-verify` locally or in a pre-commit hook and get the same answer as CI.
 - The checks are plain XML work (`System.Xml.Linq`). We don't need uSync.Core for them, which is good, because uSync.Core drags in Umbraco.Cms.Core.
 
 The case for TypeScript was speed (no tool install) and a native GitHub feel. Installing a small dotnet tool takes a few seconds, and we can get the native feel by writing GitHub annotations from the tool.
@@ -27,12 +27,12 @@ The case for TypeScript was speed (no tool install) and a native GitHub feel. In
 
 One thing to watch: the CLI targets `net10.0` only. GitHub's hosted images ship .NET 10, but the wrapper action should still call `actions/setup-dotnet` when the version isn't there, or the tool should set `RollForward=Major`.
 
-## Part 1: file checks (`uSync files-verify`)
+## Part 1: file checks (`uSyncCli files-verify`)
 
 New offline command in uSync.Cli:
 
 ```
-uSync files-verify [--folder uSync/v17] [--format text|github|sarif|junit] [--warnings-as-errors]
+uSyncCli files-verify [--folder uSync/v17] [--format text|github|sarif|junit] [--warnings-as-errors]
 ```
 
 It finds the uSync folder itself (same discovery as the site: `uSync:Settings:RootFolder` in appsettings, falling back to `uSync/v{n}`).
@@ -157,7 +157,7 @@ Matthew Hart's [actions-uSync-cli](https://github.com/mattou07/actions-uSync-cli
 
 Both repos build against this. Change it here first if it has to change.
 
-### `uSync files-verify` (offline, no server or keys)
+### `uSyncCli files-verify` (offline, no server or keys)
 
 | Option | Meaning |
 |---|---|

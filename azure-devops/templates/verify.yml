@@ -1,4 +1,4 @@
-# Step template: check uSync files with `uSync files-verify`.
+# Step template: check uSync files with `uSyncCli files-verify`.
 #
 #   resources:
 #     repositories:
