@@ -25,7 +25,20 @@ elif [ -n "${INPUT_ARGS:-}" ]; then
   read -r -a extra <<< "$INPUT_ARGS"
 fi
 
+# The tool prints names and aliases from the site, which editors control. A line
+# starting with :: would be read by the runner as a workflow command (add-mask,
+# error, ...), so switch commands off while it runs. files-verify is left alone:
+# its ::error annotations are the point of --format github.
+token=""
+if [ "$INPUT_COMMAND" != "files-verify" ]; then
+  token="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  [ -n "$token" ] || token="usync-${RANDOM}${RANDOM}${RANDOM}-$$"
+  echo "::stop-commands::$token"
+fi
+
 "$USYNC_CLI" "$INPUT_COMMAND" ${extra[@]+"${extra[@]}"}
 code=$?
+
+[ -n "$token" ] && echo "::$token::"
 echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 exit "$code"
