@@ -1,5 +1,7 @@
 # Import after deploy without waiting for the site
 
+New to this? Start with the step-by-step [getting started guide](getting-started-deploy-callback.md).
+
 After a deploy, the usual pipeline runs `usync-ping` and waits for the site to restart before it imports. That wait is runner time you pay for. On a slow-starting site it's several minutes per deploy.
 
 With the callback, the deploy workflow finishes as soon as the files are on the server. When the site starts the new build, it tells GitHub, and a second workflow runs the import.
