@@ -51,7 +51,7 @@ More in [`examples/`](examples):
 
 | Example | What it shows |
 |---|---|
-| [pr-checks.yml](examples/pr-checks.yml) | Checks on pull requests, only reporting files the PR changed, with a change summary and SARIF upload |
+| [pr-checks.yml](examples/pr-checks.yml) | Checks on pull requests, only reporting files the PR changed, with a change summary and SARIF upload. Guide in [docs/pr-checks.md](docs/pr-checks.md) |
 | [deploy-azure-webapp.yml](examples/deploy-azure-webapp.yml) | Publish, check the uSync folder made it into the output, deploy to an Azure Web App, report, import |
 | [deploy-iis.yml](examples/deploy-iis.yml) | Checks on a hosted runner, then Web Deploy to IIS from a self-hosted runner, import, health check |
 | [umbraco-cloud.yml](examples/umbraco-cloud.yml) | Checks before pushing to Umbraco Cloud (Cloud imports on the site, so only the file checks apply) |
