@@ -1,0 +1,55 @@
+# Deploy to an Azure Web App and stop. The site tells GitHub when it's up,
+# and deploy-result.yml does the uSync import then. No runner waits for the restart.
+#
+# Setup: docs/deploy-callback.md
+#
+# Needs:
+#   vars.AZURE_WEBAPP_NAME        my-site
+#   secrets.AZURE_PUBLISH_PROFILE the web app's publish profile
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The site reads the commit from its assembly version (1.0.0+<sha>),
+      # which the .NET SDK sets when it builds in a git checkout.
+      - name: Publish
+        run: dotnet publish src/MySite -c Release -o ./publish
+
+      - uses: Jumoo/usync-actions/verify@v1
+        with:
+          working-directory: src/MySite
+          publish-folder: ${{ github.workspace }}/publish
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: ./publish
+
+      # A GitHub deployment for this commit, waiting for the site.
+      # deploy-result.yml finds it by commit when the site calls back,
+      # and marks it success or failure after the import.
+      - name: Record the deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT: production
+        run: |
+          id=$(jq -n --arg ref "$GITHUB_SHA" --arg env "$ENVIRONMENT" \
+                 '{ref: $ref, environment: $env, task: "usync", auto_merge: false, required_contexts: [], description: "Waiting for the site to start"}' \
+               | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" \
+            -f state=in_progress -f description="Waiting for the site to start" \
+            -f log_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+          echo "Deployment $id is waiting for the site to call back." >> "$GITHUB_STEP_SUMMARY"

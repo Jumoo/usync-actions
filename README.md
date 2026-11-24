@@ -55,6 +55,7 @@ More in [`examples/`](examples):
 | [deploy-azure-webapp.yml](examples/deploy-azure-webapp.yml) | Publish, check the uSync folder made it into the output, deploy to an Azure Web App, report, import |
 | [deploy-iis.yml](examples/deploy-iis.yml) | Checks on a hosted runner, then Web Deploy to IIS from a self-hosted runner, import, health check |
 | [umbraco-cloud.yml](examples/umbraco-cloud.yml) | Checks before pushing to Umbraco Cloud (Cloud imports on the site, so only the file checks apply) |
+| [deploy-callback.yml](examples/deploy-callback.yml) + [deploy-result.yml](examples/deploy-result.yml) | Deploy and stop; the site tells GitHub when it's up and the import runs then, so no runner waits for the restart. [Getting started](docs/getting-started-deploy-callback.md), [reference](docs/deploy-callback.md) |
 
 ## verify
 

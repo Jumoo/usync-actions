@@ -1,0 +1,130 @@
+# Runs when the site says it has started a new build (the "uSync Site Started"
+# webhook from the uSync.Command.Notify package), then imports uSync and marks
+# the deployment that deploy-callback.yml recorded as success or failure.
+#
+# Must be on the default branch: repository_dispatch and schedule only run from there.
+#
+# Setup: docs/deploy-callback.md
+#
+# Needs:
+#   vars.SITE_URL                 https://my-site.azurewebsites.net
+#   secrets.USYNC_CLIENT_ID / USYNC_CLIENT_SECRET  an Umbraco API user (see the README)
+name: Deploy result
+
+on:
+  repository_dispatch:
+    types: [usync-site-started]
+  # Backstop for a callback that never came (site didn't start, webhook failed).
+  # Each run bills at least a minute, so this is about 120 minutes a month.
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+# one at a time, so a callback and the backstop don't import together.
+concurrency:
+  group: usync-deploy-result
+  cancel-in-progress: false
+
+env:
+  # how long a deployment can wait for its callback before the backstop checks it
+  STALE_MINUTES: 30
+
+jobs:
+  result:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the deployment
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # payload values go through env, never straight into the script
+          REVISION: ${{ github.event.client_payload.revision }}
+          MACHINE: ${{ github.event.client_payload.machine }}
+        run: |
+          # deployments still waiting for their site, newest first.
+          # (if/fi not &&, and awk not head: the step runs with -e and pipefail)
+          waiting() {
+            gh api "repos/$GITHUB_REPOSITORY/deployments?task=usync&per_page=30$1" --jq '.[] | "\(.id) \(.sha) \(.created_at)"' |
+            while read -r id sha created; do
+              state=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=1" --jq '.[0].state // ""')
+              if [ "$state" = "in_progress" ]; then echo "$id $sha $created"; fi
+            done
+          }
+
+          if [ "$GITHUB_EVENT_NAME" = "repository_dispatch" ]; then
+            echo "Site started revision ${REVISION:-(unknown)} on ${MACHINE:-(unknown)}"
+            if [ -n "$REVISION" ]; then
+              found=$(waiting "&sha=$REVISION" | awk 'NR==1')
+            else
+              found=$(waiting "" | awk 'NR==1')
+            fi
+            mode=callback
+          else
+            # no callback: only look at deployments that have waited too long
+            cutoff=$(date -u -d "-$STALE_MINUTES minutes" +%s)
+            found=$(waiting "" | while read -r id sha created; do
+              if [ "$(date -u -d "$created" +%s)" -lt "$cutoff" ]; then echo "$id $sha $created"; fi
+            done | awk 'NR==1')
+            mode=backstop
+          fi
+
+          if [ -z "$found" ]; then
+            echo "Nothing waiting." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          read -r id sha created <<< "$found"
+          echo "Deployment $id ($sha, $mode)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      # The site said it's up, so this only waits for it to answer the API.
+      # On the backstop, a site that doesn't answer fails the deployment.
+      - uses: Jumoo/usync-actions/run@v1
+        if: steps.find.outputs.id
+        with:
+          command: usync-ping
+          args: --timeout 60
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
+
+      - uses: Jumoo/usync-actions/run@v1
+        if: steps.find.outputs.id
+        with:
+          command: usync-report
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
+
+      - uses: Jumoo/usync-actions/run@v1
+        if: steps.find.outputs.id
+        with:
+          command: usync-import
+          server: ${{ vars.SITE_URL }}
+          client-id: ${{ secrets.USYNC_CLIENT_ID }}
+          client-secret: ${{ secrets.USYNC_CLIENT_SECRET }}
+
+      - name: Mark the deployment
+        if: always() && steps.find.outputs.id
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.find.outputs.id }}
+          MODE: ${{ steps.find.outputs.mode }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          if [ "$OUTCOME" = "success" ]; then
+            state=success; description="uSync import done"
+          elif [ "$MODE" = "backstop" ]; then
+            state=failure; description="No callback from the site, and the import failed or the site didn't answer"
+          else
+            state=failure; description="uSync import failed"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses" \
+            -f state="$state" -f description="$description" \
+            -f log_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+          echo "Deployment $ID: $state" >> "$GITHUB_STEP_SUMMARY"
