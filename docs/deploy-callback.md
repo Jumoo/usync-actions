@@ -23,7 +23,7 @@ A scheduled run of `deploy-result.yml` catches callbacks that never come: a site
 - **[uSync.Command.Notify](https://www.nuget.org/packages/uSync.Command.Notify)** on the site. It adds the "uSync Site Started" webhook event.
 - **A webhook** for that event, pointing at your repo's `repository_dispatch` API. The `files-webhook` command writes it into your uSync folder (below).
 - **A GitHub token** on the site that can send the dispatch.
-- **The two workflows**, [deploy-callback.yml](../examples/deploy-callback.yml) and [deploy-result.yml](../examples/deploy-result.yml), with the API user secrets the [run action](../README.md#api-user) uses. `deploy-result.yml` must be on the default branch.
+- **The two workflows**, [deploy-callback.yml](../examples/deploy-callback.yml) and [deploy-result.yml](../examples/deploy-result.yml), and, for the import steps in `deploy-result.yml`, the API user secrets the [run action](../README.md#api-user) uses. The callback itself doesn't need an API user. `deploy-result.yml` must be on the default branch.
 
 ## 1. Add the package
 

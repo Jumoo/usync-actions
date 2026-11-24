@@ -6,7 +6,8 @@ It takes about 15 minutes. You'll need:
 
 - An Umbraco 17 site using uSync, deployed from GitHub Actions. The examples deploy to an Azure Web App, and any host works.
 - Admin rights on the GitHub repo.
-- An Umbraco API user for uSync.Cli. If you don't have one yet, see [Create an API user](https://github.com/Jumoo/uSync.CommandLine#create-an-api-user).
+
+Steps 1 to 4, where the site tells GitHub it's up, need nothing else. The site sends the callback with a GitHub token, not an Umbraco login. Only the import in step 5 talks to the site, and that needs an API user.
 
 For how it works and every setting, see [deploy-callback.md](deploy-callback.md).
 
@@ -85,6 +86,8 @@ Then set these under the repo's **Settings > Secrets and variables > Actions**:
 | Secret | `AZURE_PUBLISH_PROFILE` | the web app's publish profile |
 | Secret | `USYNC_CLIENT_ID` | the API user's client id |
 | Secret | `USYNC_CLIENT_SECRET` | the API user's client secret |
+
+The two `USYNC_` secrets are for the ping, report and import steps in `deploy-result.yml`, which log in to the site's Management API. If you don't have an API user yet, see [Create an API user](https://github.com/Jumoo/uSync.CommandLine#create-an-api-user). Or add the `uSync.Command.Setup` package: given a client id and secret in config, it creates the API user when the site boots.
 
 `deploy-result.yml` must be on your **default branch**. GitHub only runs `repository_dispatch` and scheduled workflows from there.
 
