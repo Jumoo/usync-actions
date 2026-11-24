@@ -107,7 +107,7 @@ On the site, in **Settings > Webhooks**, open the webhook's log. You should see 
 | No entry in the webhook log | The package isn't on the site, or the webhook didn't import. Check uSync imported the Webhooks folder. If the site already announced this build, it won't send again; deploy a new commit. |
 | Webhook log: **403 Forbidden** | The package refused to send the token. The Umbraco log has a warning saying why: either `uSync__Notify__Secrets__GitHubToken` isn't set (or the site hasn't restarted since you set it), or the webhook URL isn't `https://api.github.com/...`. |
 | Webhook log: **401** from GitHub | The token is wrong or has expired. |
-| Webhook log: **404** from GitHub | Wrong repo name, or the token can't see that repo. |
+| Webhook log: **404** from GitHub | The token can't send to that repo. Usually **Contents** is still read-only: it needs **Read and write**, and the change only saves when you press **Update** at the bottom of the token page. Also check the repo is in the token's list and the repo name in the webhook URL is right. |
 | Webhook log: **204**, but no workflow runs | `deploy-result.yml` isn't on the default branch, or its `types:` doesn't match `usync-site-started`. |
 | Deploy result says "Nothing waiting" | The site's revision didn't match the deployed commit. Check the payload's `revision` in the webhook log. If it's empty or different, set `uSync__Notify__Revision` to the commit SHA in your deploy step. |
 | The deployment fails hours later with "No callback from the site" | The six-hourly backstop found it still waiting and the site didn't answer. Look at the webhook log and the site's startup. |
